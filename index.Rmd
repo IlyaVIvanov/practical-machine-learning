@@ -1,0 +1,117 @@
+---
+title: "Coursera Data Science Specialisation: Practical Machine Learning Project"
+output: html_document
+---
+
+## Background
+
+Using devices such as Jawbone Up, Nike FuelBand, and Fitbit it is now possible to collect a large amount of data about personal activity relatively inexpensively. These type of devices are part of the quantified self movement – a group of enthusiasts who take measurements about themselves regularly to improve their health, to find patterns in their behavior, or because they are tech geeks. One thing that people regularly do is quantify how much of a particular activity they do, but they rarely quantify how well they do it. In this project, your goal will be to use data from accelerometers on the belt, forearm, arm, and dumbell of 6 participants. They were asked to perform barbell lifts correctly and incorrectly in 5 different ways.
+
+## Data Processing
+
+### Obtaining data from sources
+
+The data are downloaded from the given URLs:
+```{r data_sources, cache=TRUE}
+training_data_url = "https://d396qusza40orc.cloudfront.net/predmachlearn/pml-training.csv"
+test_data_url = "https://d396qusza40orc.cloudfront.net/predmachlearn/pml-testing.csv"
+if(!file.exists("train.csv")) {
+  download.file(url = training_data_url, destfile = "train.csv")
+}
+if(!file.exists("test.csv")) {
+  download.file(url = testing_data_url, destfile = "test.csv")
+}
+
+```
+
+### Cleaning data and feature selection
+
+Since the data contain alot of empty string as values, the data are loaded with `na.strings` specified so that empty values can be properly recognised as `NA`.
+```{r loading_data, cache=TRUE}
+train_raw = read.csv("train.csv", na.strings = c("NA", ""))
+test_raw = read.csv("test.csv", na.strings = c("NA", ""))
+```
+
+In order to get the best features for this study, the following is performed:
+1. Removal of indexing columns and timestamps
+2. Identification of variables with zero or near zero variance
+3. Removal of columns with more than 50% `NA` values
+
+#### 1. Removal of indexing columns and timestamps
+
+The first 7 columns seem like indexes and timestamps as the values increases along with the row number.
+
+```{r removal_of_indexing_columns}
+index_timestamps_columns = seq(1,7,1)
+```
+#### 2. Identification of variables with zero or near zero variance
+
+In order to identify these near-zero-variance columns, we need the `caret` package. `columns_to_be_removed` is the variable that store the columns indices. 
+```{r near_zero_variance, cache=TRUE}
+library(caret)
+nzv_columns = nearZeroVar(train_raw, allowParallel = TRUE)
+columns_to_be_removed = c(nzv_columns, index_timestamps_columns)
+train_first_pass = train_raw[, -columns_to_be_removed]
+
+dim(train_first_pass)
+```
+#### 3. Removal of columns with more than 50% `NA` values
+
+`train_first_pass` can be be further processed to remove columns with more than 50% `NA`.
+
+```{r remove_NA_columns}
+train_second_pass = train_first_pass[, colSums(is.na(train_first_pass)/dim(train_first_pass)[1]) < 0.5]
+
+train = train_second_pass
+dim(train)
+```
+
+## Model Fitting to predict type of movements
+
+The problem we are tackling is a supervised classification problem, with labelled data set.
+
+With a basic feature vector, we can use it to train a movement classifier. We are going for Random Forest algorithm `rf` to develop the model that will classify the movement data into each of the 5 categories.
+
+We are going to use 70% of the training data to train the model and use the remaining 30% of the training data to do a validation on the model to determine the in and out of sample classification accuracy.
+
+```{r model_fitting, cache=TRUE}
+set.seed(1234)
+inTrain = createDataPartition(y = train$classe, p = 0.7, list = FALSE)
+training = train[inTrain,]
+testing = train[-inTrain,]
+modelFit = train(training$classe ~ ., data = training, preProcess = c("center", "scale"), method = "rf")
+```
+
+### In-Sample Classification Summary
+
+```{r in_sample, cache=TRUE}
+in_sample = confusionMatrix(training$classe, predict(modelFit, training))
+in_sample$table
+in_sample$overall
+in_sample$byClass
+```
+
+From the summary above, it seems that the `rf` model is able to predict the in-sample data to `r in_sample$overall["Accuracy"] * 100`% accuracy! 
+
+However, this might seems to be too good to believe. Therefore, we will need to verify its accuracy with the testing data `training` obtained from the original training data `train`.
+
+### Out-of-Sample Classification Summary
+
+```{r out_sample, cache=TRUE}
+out_sample = confusionMatrix(testing$classe, predict(modelFit, testing))
+out_sample$table
+out_sample$overall
+out_sample$byClass
+```
+
+The out-of-sample accuracy is `r out_sample$overall["Accuracy"] * 100`%, which is reasonable given that `rf` is an resource-intensive algorithm (takes a couple of hours to run). 
+
+## Experiment (Submission Exercise)
+
+The model devised in the previous section is then used to tackle the 20 problems provided.
+
+```{r experiment_submission, cache=TRUE}
+test = test_raw[, colnames(train)[-53]]
+test_predictions = predict(modelFit, test)
+print(test_predictions)
+```
