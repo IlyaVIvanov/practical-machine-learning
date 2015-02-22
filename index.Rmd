@@ -79,7 +79,7 @@ set.seed(1234)
 inTrain = createDataPartition(y = train$classe, p = 0.7, list = FALSE)
 training = train[inTrain,]
 testing = train[-inTrain,]
-modelFit = train(training$classe ~ ., data = training, preProcess = c("center", "scale"), method = "rf")
+modelFit = train(classe ~ ., data = training, preProcess = c("center", "scale"), method = "rf")
 ```
 
 ### In-Sample Classification Summary
@@ -105,6 +105,14 @@ out_sample$byClass
 ```
 
 The out-of-sample accuracy is `r out_sample$overall["Accuracy"] * 100`%, which is reasonable given that `rf` is an resource-intensive algorithm (takes a couple of hours to run). 
+
+### Cross Validation
+```{r cross_validation, cache=TRUE}
+cv_results = rfcv(training[, -53], training$classe, cv.fold = 3)
+with(cv_results, plot(n.var, error.cv, log="x", type="o", lwd=2))
+```
+
+The above plot shows that the error decreases (from `r cv_results$error.cv[5] * 100`% to `r cv_results$error.cv[1] * 100`)% as the number of variables increases from 1 to 52 in 3-fold cross validation.
 
 ## Experiment (Submission Exercise)
 
